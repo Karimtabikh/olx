@@ -2,21 +2,25 @@ import { useState } from "react";
 import Typography from "./Typography";
 import { cn } from "@/shared/utils/styling";
 
-type CollapsibleListProps = {
-  items: string[];
+type CollapsibleListProps<T> = {
+  items: T[];
   initialCount?: number;
   className?: string;
   listClassName?: string;
   buttonClassName?: string;
+  renderItem?: (item: T, index: number) => React.ReactNode;
+  getKey?: (item: T, index: number) => string;
 };
 
-export function CollapsibleList({
+export function CollapsibleList<T = string>({
   items,
   initialCount = 4,
   className,
   listClassName,
   buttonClassName,
-}: CollapsibleListProps) {
+  renderItem,
+  getKey,
+}: CollapsibleListProps<T>) {
   const [expanded, setExpanded] = useState(false);
 
   const canToggle = items.length > initialCount;
@@ -28,8 +32,14 @@ export function CollapsibleList({
     <div className={className}>
       <ul className={listClassName}>
         {visibleItems.map((item, index) => (
-          <li key={`${item}-${index}`}>
-            <Typography variant="body-text-regular">{item}</Typography>
+          <li key={getKey ? getKey(item, index) : `${item}-${index}`}>
+            {renderItem ? (
+              renderItem(item, index)
+            ) : (
+              <Typography variant="body-text-regular">
+                {String(item)}
+              </Typography>
+            )}
           </li>
         ))}
       </ul>
