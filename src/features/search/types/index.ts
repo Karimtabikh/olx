@@ -14,14 +14,3 @@ export type Location = {
   level: number;
 };
 
-export type CategoryListProps = {
-  categories: Category[];
-  selectedPath: Category[];
-  onSelect: (path: Category[]) => void;
-};
-
-export type LocationListProps = {
-  locations: Location[];
-  selectedPath: Location[];
-  onSelect: (path: Location[]) => void;
-};

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchSubCategories } from "../services/searchService";
 
 export function useSubCategories(
@@ -14,5 +14,8 @@ export function useSubCategories(
     queryFn: () => fetchSubCategories(parentChain, childLevel),
     enabled: parentChain.length > 0,
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
+
+export type UseSubCategoriesReturn = ReturnType<typeof useSubCategories>;

@@ -1,10 +1,17 @@
 import { useRouter } from "next/router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import Typography from "@/shared/components/ui/Typography";
 import CategoryList from "@/features/search/components/CategoryList";
 import LocationList from "@/features/search/components/LocationList";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { useCategories } from "@/features/search/hooks/useCategories";
 import { useLocations } from "@/features/search/hooks/useLocations";
+import {
+  selectSelectedCategoryPath,
+  selectSelectedLocationPath,
+  setSelectedCategoryPath,
+  setSelectedLocationPath,
+} from "@/features/search/store/searchSlice";
 import {
   fetchSubCategories,
   fetchSubLocations,
@@ -24,26 +31,34 @@ function buildPath(categoryPath: Category[], locationPath: Location[]): string {
 
 export default function AdsPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
   const { data: locations = [], isLoading: locationsLoading } = useLocations();
   const loading = categoriesLoading || locationsLoading;
 
-  const [selectedCategoryPath, setSelectedCategoryPath] = useState<Category[]>(
-    [],
-  );
-  const [selectedLocationPath, setSelectedLocationPath] = useState<Location[]>(
-    [],
-  );
+  const selectedCategoryPath = useAppSelector(selectSelectedCategoryPath);
+  const selectedLocationPath = useAppSelector(selectSelectedLocationPath);
 
+  const syncingFromUrl = useRef(false);
+  const lastUrlPath = useRef(router.asPath);
+
+  // Sync FROM URL TO state (on initial load and back/forward navigation)
   useEffect(() => {
-    if (loading) return;
+    if (!router.isReady || loading) return;
 
-    const slugs = router.query.slug ?? [];
-    if (slugs.length === 0) return;
+    const slugParam = router.query.slug;
+    const slugs = Array.isArray(slugParam)
+      ? slugParam
+      : slugParam
+        ? [slugParam]
+        : [];
 
-    async function resolveFromUrl() {
+    const handleUrlChange = async () => {
+      syncingFromUrl.current = true;
+      lastUrlPath.current = router.asPath;
+
       const catPath: Category[] = [];
       const locPath: Location[] = [];
       let currentCatLevel = categories;
@@ -55,19 +70,14 @@ export default function AdsPage() {
           const cat = currentCatLevel.find((c) => c.slug === segment);
           if (cat) {
             catPath.push(cat);
-            if (cat.level < 2) {
-              const parentChain = catPath.map((c) => ({
-                level: c.level,
-                externalID: c.externalID,
-              }));
-              const children = await fetchSubCategories(
-                parentChain,
-                cat.level + 1,
-              );
-              currentCatLevel = children;
-            } else {
-              currentCatLevel = [];
-            }
+            const parentChain = catPath.map((c) => ({
+              level: c.level,
+              externalID: c.externalID,
+            }));
+            currentCatLevel = await fetchSubCategories(
+              parentChain,
+              cat.level + 1,
+            );
             continue;
           }
           doneWithCategories = true;
@@ -77,39 +87,51 @@ export default function AdsPage() {
         if (loc) {
           locPath.push(loc);
           if (loc.level === 1) {
-            const subs = await fetchSubLocations(loc.externalID);
-            currentLocLevel = subs;
+            currentLocLevel = await fetchSubLocations(loc.externalID);
           } else {
             currentLocLevel = [];
           }
-          continue;
         }
       }
 
-      setSelectedCategoryPath(catPath);
-      setSelectedLocationPath(locPath);
+      dispatch(setSelectedCategoryPath(catPath));
+      dispatch(setSelectedLocationPath(locPath));
+    };
+
+    // Only parse if URL changed
+    if (router.asPath !== lastUrlPath.current) {
+      handleUrlChange();
+    }
+  }, [
+    router.isReady,
+    loading,
+    router.query.slug,
+    categories,
+    locations,
+    dispatch,
+    router.asPath,
+  ]);
+
+  // Sync FROM state TO URL (when user clicks categories/locations)
+  useEffect(() => {
+    if (!router.isReady || loading || syncingFromUrl.current) {
+      syncingFromUrl.current = false;
+      return;
     }
 
-    resolveFromUrl();
-  }, [loading, categories, locations, router.query.slug]);
+    const newPath = buildPath(selectedCategoryPath, selectedLocationPath);
 
-  const handleCategorySelect = useCallback(
-    (path: Category[]) => {
-      setSelectedCategoryPath(path);
-      const url = buildPath(path, selectedLocationPath);
-      router.push(url, undefined, { shallow: true });
-    },
-    [selectedLocationPath, router],
-  );
-
-  const handleLocationSelect = useCallback(
-    (path: Location[]) => {
-      setSelectedLocationPath(path);
-      const url = buildPath(selectedCategoryPath, path);
-      router.push(url, undefined, { shallow: true });
-    },
-    [selectedCategoryPath, router],
-  );
+    if (newPath !== router.asPath) {
+      lastUrlPath.current = newPath;
+      router.push(newPath, undefined, { shallow: true });
+    }
+  }, [
+    selectedCategoryPath,
+    selectedLocationPath,
+    router.isReady,
+    loading,
+    router,
+  ]);
 
   if (loading) {
     return (
@@ -146,16 +168,8 @@ export default function AdsPage() {
       )}
 
       <div className="flex flex-col gap-6">
-        <CategoryList
-          categories={categories}
-          selectedPath={selectedCategoryPath}
-          onSelect={handleCategorySelect}
-        />
-        <LocationList
-          locations={locations}
-          selectedPath={selectedLocationPath}
-          onSelect={handleLocationSelect}
-        />
+        <CategoryList />
+        <LocationList />
       </div>
     </div>
   );

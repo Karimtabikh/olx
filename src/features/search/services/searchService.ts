@@ -173,7 +173,7 @@ export async function fetchSubCategories(
 export async function fetchSubLocations(
   parentExternalID: string,
 ): Promise<Location[]> {
-  const countBody = buildNdjsonBody([
+  const body = buildNdjsonBody([
     { index: "olx-lb-production-ads-en" },
     {
       size: 0,
@@ -188,45 +188,41 @@ export async function fetchSubLocations(
         },
       },
     },
-  ]);
-
-  const countData = await fetchElsaticSearch(countBody);
-  const buckets =
-    countData.responses?.[0]?.aggregations?.sub_locations?.buckets ?? [];
-
-  if (buckets.length === 0) return [];
-
-  const externalIDs = buckets.map(
-    (b: { key: string; doc_count: number }) => b.key,
-  );
-  const countMap: Record<string, number> = {};
-  for (const b of buckets) {
-    countMap[b.key] = b.doc_count;
-  }
-
-  const nameBody = buildNdjsonBody([
     { index: "olx-lb-production-locations-en" },
     {
       size: 500,
       query: {
         bool: {
-          must: [{ terms: { externalID: externalIDs } }],
+          must: [{ term: { level: 2 } }],
         },
       },
       _source: ["externalID", "name"],
     },
   ]);
 
-  const nameData = await fetchElsaticSearch(nameBody);
-  const nameHits = nameData.responses?.[0]?.hits?.hits ?? [];
+  const data = await fetchElsaticSearch(body);
 
-  return nameHits.map(
-    (hit: { _source: { externalID: string; name: string } }) => ({
+  const buckets =
+    data.responses?.[0]?.aggregations?.sub_locations?.buckets ?? [];
+  const countMap: Record<string, number> = {};
+  for (const b of buckets) {
+    countMap[b.key] = b.doc_count;
+  }
+
+  if (buckets.length === 0) return [];
+
+  const nameHits = data.responses?.[1]?.hits?.hits ?? [];
+
+  return nameHits
+    .filter(
+      (hit: { _source: { externalID: string } }) =>
+        countMap[hit._source.externalID] > 0,
+    )
+    .map((hit: { _source: { externalID: string; name: string } }) => ({
       name: hit._source.name,
       externalID: hit._source.externalID,
       slug: hit._source.name.toLowerCase().split(" ").join("-"),
       count: countMap[hit._source.externalID] ?? 0,
       level: 2,
-    }),
-  );
+    }));
 }

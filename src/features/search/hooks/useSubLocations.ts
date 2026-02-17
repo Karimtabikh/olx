@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchSubLocations } from "../services/searchService";
 
 export function useSubLocations(parentExternalID: string | null) {
@@ -7,5 +7,6 @@ export function useSubLocations(parentExternalID: string | null) {
     queryFn: () => fetchSubLocations(parentExternalID!),
     enabled: !!parentExternalID,
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }

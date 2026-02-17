@@ -3,30 +3,41 @@ import Card from "@/shared/components/ui/Card";
 import Typography from "@/shared/components/ui/Typography";
 import { CollapsibleList } from "@/shared/components/ui/CollapsibleList";
 import { cn } from "@/shared/utils/styling";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { useCategories } from "../hooks/useCategories";
 import { useSubCategories } from "../hooks/useSubCategories";
-import type { Category, CategoryListProps } from "../types";
+import {
+  selectSelectedCategoryPath,
+  setSelectedCategoryPath,
+} from "../store/searchSlice";
+import type { Category } from "../types";
 
-export default function CategoryList({
-  categories,
-  selectedPath,
-  onSelect,
-}: CategoryListProps) {
+export default function CategoryList() {
+  const dispatch = useAppDispatch();
+  const { data: categories = [] } = useCategories();
+  const selectedPath = useAppSelector(selectSelectedCategoryPath);
+
   const current = selectedPath[selectedPath.length - 1];
   const fullChain = selectedPath.map((c) => ({
     level: c.level,
     externalID: c.externalID,
   }));
 
-  const { data: children = [], isLoading: childrenLoading } = useSubCategories(
-    current?.level < 2 ? fullChain : [],
+  const {
+    data: children = [],
+    isFetching: childrenFetching,
+    isPlaceholderData: childrenIsPlaceholder,
+  } = useSubCategories(
+    current ? fullChain : [],
     current ? current.level + 1 : 1,
   );
 
   const parentOfcurrent = selectedPath[selectedPath.length - 2];
-  const { data: siblings = [] } = useSubCategories(
-    selectedPath.length >= 2 ? fullChain.slice(0, -1) : [],
-    parentOfcurrent ? parentOfcurrent.level + 1 : 1,
-  );
+  const { data: siblings = [], isPlaceholderData: siblingsIsPlaceholder } =
+    useSubCategories(
+      parentOfcurrent ? fullChain.slice(0, -1) : [],
+      parentOfcurrent ? parentOfcurrent.level + 1 : 1,
+    );
 
   // Display priority: children > siblings > root
   let displayItems: Category[];
@@ -34,16 +45,16 @@ export default function CategoryList({
 
   if (selectedPath.length === 0) {
     displayItems = categories;
-  } else if (childrenLoading || children.length > 0) {
-    // current has children (or still loading them)
+  } else if (!childrenIsPlaceholder && children.length > 0) {
+    // current has children
     displayItems = children;
     displayParent = current;
-  } else if (siblings.length > 0) {
+  } else if (!siblingsIsPlaceholder && siblings.length > 0) {
     // current is a leaf — show its siblings, with parent as header
     displayItems = siblings;
     displayParent = parentOfcurrent;
   } else {
-    // Single selected category with no children, show root
+    // Loading or single category with no children/siblings, show root
     displayItems = categories;
   }
 
@@ -54,12 +65,14 @@ export default function CategoryList({
       );
 
       if (isSelected) {
-        onSelect(selectedPath.slice(0, cat.level));
+        dispatch(setSelectedCategoryPath(selectedPath.slice(0, cat.level)));
       } else {
-        onSelect([...selectedPath.slice(0, cat.level), cat]);
+        dispatch(
+          setSelectedCategoryPath([...selectedPath.slice(0, cat.level), cat]),
+        );
       }
     },
-    [selectedPath, onSelect],
+    [dispatch, selectedPath],
   );
 
   return (
@@ -71,7 +84,7 @@ export default function CategoryList({
       {displayParent && (
         <button
           type="button"
-          onClick={() => onSelect([])}
+          onClick={() => dispatch(setSelectedCategoryPath([]))}
           className="flex items-center gap-1 mb-3 text-sm font-bold text-black hover:underline"
         >
           All Categories
@@ -86,11 +99,9 @@ export default function CategoryList({
         </div>
       )}
 
-      {childrenLoading ? (
-        <Typography variant="body-text-regular" className="text-gray-400 px-3">
-          Loading...
-        </Typography>
-      ) : (
+      <div
+        className={cn("transition-opacity", childrenFetching && "opacity-60")}
+      >
         <CollapsibleList
           items={displayItems}
           initialCount={4}
@@ -123,7 +134,7 @@ export default function CategoryList({
             );
           }}
         />
-      )}
+      </div>
     </Card>
   );
 }
