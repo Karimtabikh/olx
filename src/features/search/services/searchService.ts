@@ -99,3 +99,134 @@ export async function fetchLocations(): Promise<Location[]> {
     }),
   );
 }
+
+export async function fetchSubCategories(
+  parentChain: { level: number; externalID: string }[],
+  childLevel: number,
+): Promise<Category[]> {
+  const childField = `category.lvl${childLevel}`;
+
+  const parentFilters = parentChain.map((p) => ({
+    term: { [`category.lvl${p.level}.externalID`]: p.externalID },
+  }));
+
+  const body = buildNdjsonBody([
+    { index: "olx-lb-production-ads-en" },
+    {
+      size: 0,
+      query: {
+        bool: {
+          filter: [
+            ...parentFilters,
+            { exists: { field: `${childField}.externalID` } },
+          ],
+        },
+      },
+      aggs: {
+        sub_categories: {
+          terms: { field: `${childField}.externalID`, size: 200 },
+        },
+      },
+    },
+    { index: "olx-lb-production-ads-en" },
+    {
+      size: 200,
+      query: {
+        bool: {
+          filter: [
+            ...parentFilters,
+            { exists: { field: `${childField}.externalID` } },
+          ],
+        },
+      },
+      collapse: { field: `${childField}.externalID` },
+      _source: [childField],
+    },
+  ]);
+
+  const data = await fetchElsaticSearch(body);
+
+  const buckets =
+    data.responses?.[0]?.aggregations?.sub_categories?.buckets ?? [];
+  const countMap: Record<string, number> = {};
+  for (const bucket of buckets) {
+    countMap[bucket.key] = bucket.doc_count;
+  }
+
+  const hits = data.responses?.[1]?.hits?.hits ?? [];
+  if (hits.length === 0) return [];
+
+  return hits.map(
+    (hit: { _source: Record<string, Record<string, string | number>> }) => {
+      const src = hit._source[childField];
+      return {
+        name: src.name as string,
+        slug: src.slug as string,
+        externalID: String(src.externalID),
+        level: childLevel,
+        count: countMap[String(src.externalID)] ?? 0,
+      };
+    },
+  );
+}
+
+export async function fetchSubLocations(
+  parentExternalID: string,
+): Promise<Location[]> {
+  const countBody = buildNdjsonBody([
+    { index: "olx-lb-production-ads-en" },
+    {
+      size: 0,
+      query: {
+        bool: {
+          filter: [{ term: { "location.lvl1.externalID": parentExternalID } }],
+        },
+      },
+      aggs: {
+        sub_locations: {
+          terms: { field: "location.lvl2.externalID", size: 50 },
+        },
+      },
+    },
+  ]);
+
+  const countData = await fetchElsaticSearch(countBody);
+  const buckets =
+    countData.responses?.[0]?.aggregations?.sub_locations?.buckets ?? [];
+
+  if (buckets.length === 0) return [];
+
+  const externalIDs = buckets.map(
+    (b: { key: string; doc_count: number }) => b.key,
+  );
+  const countMap: Record<string, number> = {};
+  for (const b of buckets) {
+    countMap[b.key] = b.doc_count;
+  }
+
+  const nameBody = buildNdjsonBody([
+    { index: "olx-lb-production-locations-en" },
+    {
+      size: 500,
+      query: {
+        bool: {
+          must: [{ terms: { externalID: externalIDs } }],
+        },
+      },
+      _source: ["externalID", "name"],
+    },
+  ]);
+
+  const nameData = await fetchElsaticSearch(nameBody);
+  const nameHits = nameData.responses?.[0]?.hits?.hits ?? [];
+
+  return nameHits.map(
+    (hit: { _source: { externalID: string; name: string } }) => ({
+      name: hit._source.name,
+      externalID: hit._source.externalID,
+      slug: hit._source.name.toLowerCase().split(" ").join("-"),
+      count: countMap[hit._source.externalID] ?? 0,
+      level: 2,
+    }),
+  );
+}
