@@ -14,3 +14,20 @@ export type Location = {
   level: number;
 };
 
+export type LocationHierarchyEntry = {
+  level: number;
+  externalID: string;
+  name: string;
+  name_l1: string;
+  slug: string;
+};
+
+export type LocationHit = {
+  _source: {
+    externalID: string;
+    name: string;
+    slug: string;
+    level: number;
+    hierarchy: LocationHierarchyEntry[];
+  };
+};

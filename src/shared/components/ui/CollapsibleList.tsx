@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRouter } from "next/router";
 import Typography from "./Typography";
 import { cn } from "@/shared/utils/styling";
 
@@ -21,6 +22,7 @@ export function CollapsibleList<T = string>({
   renderItem,
   getKey,
 }: CollapsibleListProps<T>) {
+  const { locale } = useRouter();
   const [expanded, setExpanded] = useState(false);
 
   const canToggle = items.length > initialCount;
@@ -50,7 +52,9 @@ export function CollapsibleList<T = string>({
           onClick={() => setExpanded((prev) => !prev)}
           className={cn("mt-2 text-sm font-medium", buttonClassName)}
         >
-          {expanded ? "View less" : "View more"}
+          {expanded
+            ? locale === "ar" ? "عرض أقل" : "View less"
+            : locale === "ar" ? "عرض المزيد" : "View more"}
         </button>
       )}
     </div>

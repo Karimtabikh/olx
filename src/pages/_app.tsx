@@ -3,15 +3,16 @@ import type { AppProps } from "next/app";
 import { Provider } from "react-redux";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { store } from "@/store";
+import { wrapper } from "@/store";
 
-export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, ...rest }: AppProps) {
+  const { store, props } = wrapper.useWrappedStore(rest);
   const [queryClient] = useState(() => new QueryClient());
 
   return (
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
-        <Component {...pageProps} />
+        <Component {...props.pageProps} />
       </QueryClientProvider>
     </Provider>
   );

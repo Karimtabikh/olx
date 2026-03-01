@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import { HYDRATE } from "next-redux-wrapper";
 import type { RootState } from "@/store";
 import type { Category, Location } from "../types";
 
@@ -22,6 +23,12 @@ const searchSlice = createSlice({
     setSelectedLocationPath(state, action: PayloadAction<Location[]>) {
       state.selectedLocationPath = action.payload;
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(HYDRATE, (_state, action) => {
+      const payload = action as unknown as { payload: RootState };
+      return payload.payload.search;
+    });
   },
 });
 
